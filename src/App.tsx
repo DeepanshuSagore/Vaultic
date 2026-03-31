@@ -39,7 +39,7 @@ const navLinks = [
 ]
 
 const videoSource =
-  'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260330_145725_08886141-ed95-4a8e-8d6d-b75eaadce638.mp4'
+  'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260319_055001_8e16d972-3b2b-441c-86ad-2901a54682f9.mp4'
 
 const clerkAppearance = {
   variables: {
@@ -117,7 +117,10 @@ function SiteShell({ children }: { children: ReactNode }) {
       </video>
 
       <div className="relative z-10 flex min-h-screen flex-col">
-        <nav className="relative z-10 mx-auto flex w-full max-w-7xl items-center justify-between px-8 py-6">
+        <nav
+          className="relative z-10 mx-auto flex w-full max-w-7xl items-center justify-between px-8 py-6"
+          style={{ fontFamily: "'Instrument Serif', serif" }}
+        >
           <Link
             to="/"
             className="text-3xl tracking-tight text-foreground"
