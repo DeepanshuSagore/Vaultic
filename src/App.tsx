@@ -12,6 +12,8 @@ import {
 import type { FormEvent, ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { DottedSurface } from '@/components/ui/dotted-surface'
+import { RulerCarousel } from '@/components/ui/ruler-carousel'
 import { cn } from '@/lib/utils'
 import {
   VaultApiError,
@@ -37,9 +39,6 @@ const navLinks = [
   { to: '/library', label: 'Library', end: false },
   { to: '/me', label: 'Me', end: false },
 ]
-
-const videoSource =
-  'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260314_131748_f2ca2a28-fed7-44c8-b9a9-bd9acdd5ec31.mp4'
 
 const clerkAppearance = {
   variables: {
@@ -85,6 +84,21 @@ async function getRequiredToken(getToken: () => Promise<string | null>) {
   return token
 }
 
+function toCategorySlug(name: string) {
+  const slug = name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+
+  return slug || 'category'
+}
+
+function toCategoryPath(name: string) {
+  return encodeURIComponent(toCategorySlug(name))
+}
+
 function hostFromUrl(url: string) {
   try {
     return new URL(url).hostname.replace(/^www\./i, '')
@@ -105,16 +119,8 @@ function faviconFromUrl(url: string) {
 
 function SiteShell({ children }: { children: ReactNode }) {
   return (
-    <div className="relative min-h-screen overflow-hidden bg-background text-foreground">
-      <video
-        className="absolute inset-0 z-0 h-full w-full object-cover"
-        autoPlay
-        loop
-        muted
-        playsInline
-      >
-        <source src={videoSource} type="video/mp4" />
-      </video>
+    <div className="relative min-h-screen overflow-hidden bg-black text-foreground">
+      <DottedSurface className="opacity-90" />
 
       <div className="relative z-10 flex min-h-screen flex-col">
         <nav
@@ -137,7 +143,7 @@ function SiteShell({ children }: { children: ReactNode }) {
                   end={item.end}
                   className={({ isActive }) =>
                     cn(
-                      'text-sm transition-colors',
+                      'liquid-glass rounded-full px-5 py-2 text-base leading-none transition-all hover:scale-[1.02]',
                       isActive
                         ? 'text-foreground'
                         : 'text-muted-foreground hover:text-foreground',
@@ -178,7 +184,7 @@ function SiteShell({ children }: { children: ReactNode }) {
 function HomeHero() {
   return (
     <SiteShell>
-      <main className="relative z-10 flex flex-1 flex-col items-center justify-center px-6 pt-32 pb-40 py-22.5 text-center">
+      <main className="relative z-10 flex flex-1 flex-col items-center justify-center px-6 pt-12 pb-40 py-22.5 text-center">
         <h1
           className="animate-fade-rise max-w-7xl text-5xl font-normal leading-[0.95] tracking-[-2.46px] sm:text-7xl md:text-8xl"
           style={{ fontFamily: "'Instrument Serif', serif" }}
@@ -211,8 +217,6 @@ function HomeDashboard() {
   const { getToken } = useAuth()
 
   const [categories, setCategories] = useState<VaultCategory[]>([])
-  const [recentLinks, setRecentLinks] = useState<VaultWebsite[]>([])
-  const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({})
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
@@ -222,19 +226,9 @@ function HomeDashboard() {
 
     try {
       const token = await getRequiredToken(getToken)
-      const [nextCategories, nextLinks] = await Promise.all([
-        listCategories(token),
-        listWebsites(token, { limit: 200 }),
-      ])
+      const nextCategories = await listCategories(token)
 
-      const counts = nextLinks.reduce<Record<string, number>>((acc, link) => {
-        acc[link.categoryId] = (acc[link.categoryId] || 0) + 1
-        return acc
-      }, {})
-
-      setCategories(nextCategories.slice(0, 6))
-      setRecentLinks(nextLinks.slice(0, 6))
-      setCategoryCounts(counts)
+      setCategories(nextCategories)
     } catch (error) {
       setErrorMessage(getErrorMessage(error))
     } finally {
@@ -248,90 +242,35 @@ function HomeDashboard() {
 
   return (
     <SiteShell>
-      <main className="relative z-10 flex flex-1 px-6 pt-28 pb-16 sm:px-8">
+      <main className="relative z-10 flex flex-1 px-6 pt-6 pb-16 sm:px-8">
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
           <header className="animate-fade-rise text-center">
-            <p className="text-xs tracking-[0.3em] text-muted-foreground uppercase">
-              Home
-            </p>
             <h1
-              className="mt-3 text-4xl font-normal leading-[0.95] tracking-[-1.6px] sm:text-6xl"
+              className="text-4xl font-normal leading-[0.95] tracking-[-1.6px] sm:text-6xl"
               style={{ fontFamily: "'Instrument Serif', serif" }}
             >
               A calm space for what matters.
             </h1>
           </header>
 
-          <section className="liquid-glass animate-fade-rise-delay rounded-4xl p-6 sm:p-8">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl" style={{ fontFamily: "'Instrument Serif', serif" }}>
-                Your Categories
-              </h2>
-              <Button
-                asChild
-                variant="ghost"
-                className="rounded-full border border-white/20 px-4 py-2 text-sm text-muted-foreground hover:bg-transparent hover:text-foreground"
-              >
-                <Link to="/library">Open Library</Link>
-              </Button>
-            </div>
-
+          <section className="animate-fade-rise-delay">
             {isLoading ? (
               <p className="mt-6 text-sm text-muted-foreground">Loading categories...</p>
-            ) : categories.length === 0 ? (
-              <p className="mt-6 text-sm text-muted-foreground">
-                No categories yet. Create your first one in Library.
-              </p>
             ) : (
-              <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {categories.map((category) => (
-                  <button
-                    key={category._id}
-                    type="button"
-                    onClick={() => navigate(`/library/${category._id}`)}
-                    className="liquid-glass rounded-3xl px-4 py-4 text-left transition-all hover:scale-[1.01] hover:shadow-[0_0_24px_rgba(255,255,255,0.08)]"
-                  >
-                    <p className="text-lg text-foreground">{category.name}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {categoryCounts[category._id] || 0} links
-                    </p>
-                  </button>
-                ))}
-              </div>
-            )}
-          </section>
+              <RulerCarousel
+                className="mt-24"
+                originalItems={categories.map((category) => ({
+                  id: category._id,
+                  title: category.name,
+                }))}
+                onItemClick={(item) => {
+                  const category = categories.find((entry) => entry._id === item.id)
 
-          <section className="liquid-glass animate-fade-rise-delay-2 rounded-4xl p-6 sm:p-8">
-            <h2 className="text-2xl" style={{ fontFamily: "'Instrument Serif', serif" }}>
-              Recent Links
-            </h2>
-
-            {isLoading ? (
-              <p className="mt-6 text-sm text-muted-foreground">Loading links...</p>
-            ) : recentLinks.length === 0 ? (
-              <p className="mt-6 text-sm text-muted-foreground">
-                No recent links yet. Add one from a category in Library.
-              </p>
-            ) : (
-              <ul className="mt-4 divide-y divide-white/10">
-                {recentLinks.map((link) => (
-                  <li key={link._id}>
-                    <a
-                      href={link.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex items-center gap-3 rounded-2xl px-3 py-3 transition-colors hover:bg-white/5"
-                    >
-                      <img
-                        src={faviconFromUrl(link.url)}
-                        alt=""
-                        className="size-5 rounded-sm"
-                      />
-                      <span className="text-sm text-foreground">{link.title}</span>
-                    </a>
-                  </li>
-                ))}
-              </ul>
+                  if (category) {
+                    navigate(`/library/${toCategoryPath(category.name)}`)
+                  }
+                }}
+              />
             )}
 
             {errorMessage ? (
@@ -434,20 +373,8 @@ function LibraryPage() {
     <SiteShell>
       <main className="relative z-10 flex flex-1 px-6 pt-28 pb-16 sm:px-8">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
-          <header className="liquid-glass animate-fade-rise rounded-4xl px-6 py-7 sm:px-8">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-xs tracking-[0.3em] text-muted-foreground uppercase">
-                  Library
-                </p>
-                <h1
-                  className="mt-2 text-4xl font-normal tracking-[-1.4px]"
-                  style={{ fontFamily: "'Instrument Serif', serif" }}
-                >
-                  Library
-                </h1>
-              </div>
-
+          <section className="liquid-glass animate-fade-rise-delay rounded-4xl p-6 sm:p-8">
+            <div className="mb-5 flex justify-end">
               <Button
                 type="button"
                 variant="ghost"
@@ -460,7 +387,7 @@ function LibraryPage() {
 
             {showCategoryForm ? (
               <form
-                className="mt-5 flex flex-col gap-3 sm:flex-row"
+                className="mb-5 flex flex-col gap-3 sm:flex-row"
                 onSubmit={handleCreateCategory}
               >
                 <input
@@ -480,9 +407,7 @@ function LibraryPage() {
                 </Button>
               </form>
             ) : null}
-          </header>
 
-          <section className="liquid-glass animate-fade-rise-delay rounded-4xl p-6 sm:p-8">
             {isLoading ? (
               <p className="text-sm text-muted-foreground">Loading categories...</p>
             ) : categories.length === 0 ? (
@@ -522,7 +447,7 @@ function LibraryPage() {
 function CategoryViewPage() {
   const navigate = useNavigate()
   const { getToken } = useAuth()
-  const { categoryId = '' } = useParams()
+  const { categoryRef = '' } = useParams()
 
   const [category, setCategory] = useState<VaultCategory | null>(null)
   const [links, setLinks] = useState<VaultWebsite[]>([])
@@ -534,7 +459,7 @@ function CategoryViewPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const loadCategoryData = useCallback(async () => {
-    if (!categoryId) {
+    if (!categoryRef) {
       return
     }
 
@@ -544,7 +469,12 @@ function CategoryViewPage() {
     try {
       const token = await getRequiredToken(getToken)
       const allCategories = await listCategories(token)
-      const currentCategory = allCategories.find((item) => item._id === categoryId) || null
+      const decodedRef = decodeURIComponent(categoryRef).toLowerCase()
+      const currentCategory =
+        allCategories.find(
+          (item) =>
+            item._id === categoryRef || toCategorySlug(item.name) === decodedRef,
+        ) || null
 
       setCategory(currentCategory)
 
@@ -554,7 +484,7 @@ function CategoryViewPage() {
       }
 
       const categoryLinks = await listWebsites(token, {
-        categoryId,
+        categoryId: currentCategory._id,
         limit: 200,
       })
 
@@ -564,7 +494,7 @@ function CategoryViewPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [categoryId, getToken])
+  }, [categoryRef, getToken])
 
   useEffect(() => {
     void loadCategoryData()
@@ -575,7 +505,7 @@ function CategoryViewPage() {
 
     const url = newUrl.trim()
 
-    if (!url || !categoryId) {
+    if (!url || !category?._id) {
       return
     }
 
@@ -586,7 +516,7 @@ function CategoryViewPage() {
       const token = await getRequiredToken(getToken)
 
       await createWebsite(token, {
-        categoryId,
+        categoryId: category._id,
         url,
         title: newTitle.trim() || undefined,
       })
@@ -887,7 +817,7 @@ function App() {
       />
 
       <Route
-        path="/library/:categoryId"
+        path="/library/:categoryRef"
         element={
           <ProtectedRoute redirectUrl="/library">
             <CategoryViewPage />

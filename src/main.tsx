@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { ClerkProvider } from '@clerk/clerk-react'
+import { ThemeProvider } from 'next-themes'
 import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import App from './App.tsx'
@@ -14,9 +15,11 @@ if (!publishableKey) {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ClerkProvider publishableKey={publishableKey}>
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
+      <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
+        <BrowserRouter>
+          <App />
+        </BrowserRouter>
+      </ThemeProvider>
     </ClerkProvider>
   </StrictMode>,
 )
