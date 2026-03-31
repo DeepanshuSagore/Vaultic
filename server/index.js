@@ -14,6 +14,16 @@ const app = express()
 
 const frontendOrigin = process.env.FRONTEND_ORIGIN || 'http://localhost:5173'
 const port = Number(process.env.PORT || 4000)
+const missingEnv = ['CLERK_SECRET_KEY', 'MONGODB_URI'].filter(
+  (name) => !process.env[name] || !process.env[name].trim(),
+)
+
+if (missingEnv.length > 0) {
+  console.error(
+    `Missing required env variables: ${missingEnv.join(', ')}. Update .env.local and retry.`,
+  )
+  process.exit(1)
+}
 
 app.use(
   cors({
@@ -23,7 +33,6 @@ app.use(
 )
 
 app.use(express.json())
-app.use(clerkMiddleware())
 
 app.get('/health', (_req, res) => {
   res.json({
@@ -31,6 +40,8 @@ app.get('/health', (_req, res) => {
     time: new Date().toISOString(),
   })
 })
+
+app.use(clerkMiddleware())
 
 app.use('/api/categories', categoriesRouter)
 app.use('/api/websites', websitesRouter)
