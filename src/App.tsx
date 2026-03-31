@@ -1,6 +1,7 @@
 import {
   RedirectToSignIn,
   SignIn,
+  SignOutButton,
   SignUp,
   SignedIn,
   SignedOut,
@@ -16,19 +17,26 @@ import {
   VaultApiError,
   createCategory,
   createWebsite,
-  deleteCategory,
-  deleteWebsite,
   listCategories,
   listWebsites,
-  moveWebsite,
-  searchWebsites,
-  updateWebsite,
   type VaultCategory,
   type VaultWebsite,
 } from '@/lib/vault-api'
-import { Link, Navigate, Route, Routes } from 'react-router-dom'
+import {
+  Link,
+  NavLink,
+  Navigate,
+  Route,
+  Routes,
+  useNavigate,
+  useParams,
+} from 'react-router-dom'
 
-const navLinks = ['Home', 'Studio', 'About', 'Journal', 'Reach Us']
+const navLinks = [
+  { to: '/', label: 'Home', end: true },
+  { to: '/library', label: 'Library', end: false },
+  { to: '/me', label: 'Me', end: false },
+]
 
 const videoSource =
   'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260330_145725_08886141-ed95-4a8e-8d6d-b75eaadce638.mp4'
@@ -59,7 +67,25 @@ const clerkAppearance = {
   },
 }
 
-function formatHost(url: string) {
+function getErrorMessage(error: unknown) {
+  if (error instanceof VaultApiError || error instanceof Error) {
+    return error.message
+  }
+
+  return 'Something went wrong. Please try again.'
+}
+
+async function getRequiredToken(getToken: () => Promise<string | null>) {
+  const token = await getToken()
+
+  if (!token) {
+    throw new Error('Session expired. Please sign in again.')
+  }
+
+  return token
+}
+
+function hostFromUrl(url: string) {
   try {
     return new URL(url).hostname.replace(/^www\./i, '')
   } catch {
@@ -67,17 +93,14 @@ function formatHost(url: string) {
   }
 }
 
-function toTagArray(rawTags: string) {
-  return [...new Set(rawTags.split(',').map((tag) => tag.trim()).filter(Boolean))]
-    .slice(0, 20)
-}
+function faviconFromUrl(url: string) {
+  const host = hostFromUrl(url)
 
-function getErrorMessage(error: unknown) {
-  if (error instanceof VaultApiError || error instanceof Error) {
-    return error.message
+  if (!host) {
+    return ''
   }
 
-  return 'Something went wrong. Please try again.'
+  return `https://www.google.com/s2/favicons?domain=${host}&sz=64`
 }
 
 function SiteShell({ children }: { children: ReactNode }) {
@@ -104,24 +127,24 @@ function SiteShell({ children }: { children: ReactNode }) {
           </Link>
 
           <ul className="hidden items-center gap-8 md:flex">
-            {navLinks.map((link) => {
-              const isActive = link === 'Home'
-
-              return (
-                <li key={link}>
-                  <a
-                    href="#"
-                    className={`text-sm transition-colors ${
+            {navLinks.map((item) => (
+              <li key={item.to}>
+                <NavLink
+                  to={item.to}
+                  end={item.end}
+                  className={({ isActive }) =>
+                    cn(
+                      'text-sm transition-colors',
                       isActive
                         ? 'text-foreground'
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    {link}
-                  </a>
-                </li>
-              )
-            })}
+                        : 'text-muted-foreground hover:text-foreground',
+                    )
+                  }
+                >
+                  {item.label}
+                </NavLink>
+              </li>
+            ))}
           </ul>
 
           <div className="flex items-center gap-3">
@@ -136,14 +159,6 @@ function SiteShell({ children }: { children: ReactNode }) {
             </SignedOut>
 
             <SignedIn>
-              <Button
-                asChild
-                variant="ghost"
-                className="liquid-glass rounded-full px-5 py-2.5 text-sm text-foreground hover:scale-[1.03] hover:bg-transparent"
-              >
-                <Link to="/vault">Open Vault</Link>
-              </Button>
-
               <div className="liquid-glass rounded-full px-2 py-1">
                 <UserButton afterSignOutUrl="/" />
               </div>
@@ -157,7 +172,7 @@ function SiteShell({ children }: { children: ReactNode }) {
   )
 }
 
-function LandingPage() {
+function HomeHero() {
   return (
     <SiteShell>
       <main className="relative z-10 flex flex-1 flex-col items-center justify-center px-6 pt-32 pb-40 py-22.5 text-center">
@@ -188,6 +203,604 @@ function LandingPage() {
   )
 }
 
+function HomeDashboard() {
+  const navigate = useNavigate()
+  const { getToken } = useAuth()
+
+  const [categories, setCategories] = useState<VaultCategory[]>([])
+  const [recentLinks, setRecentLinks] = useState<VaultWebsite[]>([])
+  const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({})
+  const [isLoading, setIsLoading] = useState(true)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
+  const loadDashboardData = useCallback(async () => {
+    setIsLoading(true)
+    setErrorMessage(null)
+
+    try {
+      const token = await getRequiredToken(getToken)
+      const [nextCategories, nextLinks] = await Promise.all([
+        listCategories(token),
+        listWebsites(token, { limit: 200 }),
+      ])
+
+      const counts = nextLinks.reduce<Record<string, number>>((acc, link) => {
+        acc[link.categoryId] = (acc[link.categoryId] || 0) + 1
+        return acc
+      }, {})
+
+      setCategories(nextCategories.slice(0, 6))
+      setRecentLinks(nextLinks.slice(0, 6))
+      setCategoryCounts(counts)
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error))
+    } finally {
+      setIsLoading(false)
+    }
+  }, [getToken])
+
+  useEffect(() => {
+    void loadDashboardData()
+  }, [loadDashboardData])
+
+  return (
+    <SiteShell>
+      <main className="relative z-10 flex flex-1 px-6 pt-28 pb-16 sm:px-8">
+        <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
+          <header className="animate-fade-rise text-center">
+            <p className="text-xs tracking-[0.3em] text-muted-foreground uppercase">
+              Home
+            </p>
+            <h1
+              className="mt-3 text-4xl font-normal leading-[0.95] tracking-[-1.6px] sm:text-6xl"
+              style={{ fontFamily: "'Instrument Serif', serif" }}
+            >
+              A calm space for what matters.
+            </h1>
+          </header>
+
+          <section className="liquid-glass animate-fade-rise-delay rounded-4xl p-6 sm:p-8">
+            <div className="flex items-center justify-between">
+              <h2 className="text-2xl" style={{ fontFamily: "'Instrument Serif', serif" }}>
+                Your Categories
+              </h2>
+              <Button
+                asChild
+                variant="ghost"
+                className="rounded-full border border-white/20 px-4 py-2 text-sm text-muted-foreground hover:bg-transparent hover:text-foreground"
+              >
+                <Link to="/library">Open Library</Link>
+              </Button>
+            </div>
+
+            {isLoading ? (
+              <p className="mt-6 text-sm text-muted-foreground">Loading categories...</p>
+            ) : categories.length === 0 ? (
+              <p className="mt-6 text-sm text-muted-foreground">
+                No categories yet. Create your first one in Library.
+              </p>
+            ) : (
+              <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {categories.map((category) => (
+                  <button
+                    key={category._id}
+                    type="button"
+                    onClick={() => navigate(`/library/${category._id}`)}
+                    className="liquid-glass rounded-3xl px-4 py-4 text-left transition-all hover:scale-[1.01] hover:shadow-[0_0_24px_rgba(255,255,255,0.08)]"
+                  >
+                    <p className="text-lg text-foreground">{category.name}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {categoryCounts[category._id] || 0} links
+                    </p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="liquid-glass animate-fade-rise-delay-2 rounded-4xl p-6 sm:p-8">
+            <h2 className="text-2xl" style={{ fontFamily: "'Instrument Serif', serif" }}>
+              Recent Links
+            </h2>
+
+            {isLoading ? (
+              <p className="mt-6 text-sm text-muted-foreground">Loading links...</p>
+            ) : recentLinks.length === 0 ? (
+              <p className="mt-6 text-sm text-muted-foreground">
+                No recent links yet. Add one from a category in Library.
+              </p>
+            ) : (
+              <ul className="mt-4 divide-y divide-white/10">
+                {recentLinks.map((link) => (
+                  <li key={link._id}>
+                    <a
+                      href={link.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-3 rounded-2xl px-3 py-3 transition-colors hover:bg-white/5"
+                    >
+                      <img
+                        src={faviconFromUrl(link.url)}
+                        alt=""
+                        className="size-5 rounded-sm"
+                      />
+                      <span className="text-sm text-foreground">{link.title}</span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {errorMessage ? (
+              <p className="mt-4 rounded-2xl border border-red-400/25 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                {errorMessage}
+              </p>
+            ) : null}
+          </section>
+        </div>
+      </main>
+    </SiteShell>
+  )
+}
+
+function HomePage() {
+  return (
+    <>
+      <SignedOut>
+        <HomeHero />
+      </SignedOut>
+
+      <SignedIn>
+        <HomeDashboard />
+      </SignedIn>
+    </>
+  )
+}
+
+function LibraryPage() {
+  const navigate = useNavigate()
+  const { getToken } = useAuth()
+
+  const [categories, setCategories] = useState<VaultCategory[]>([])
+  const [websites, setWebsites] = useState<VaultWebsite[]>([])
+  const [newCategoryName, setNewCategoryName] = useState('')
+  const [showCategoryForm, setShowCategoryForm] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
+  const categoryCounts = useMemo(() => {
+    return websites.reduce<Record<string, number>>((acc, link) => {
+      acc[link.categoryId] = (acc[link.categoryId] || 0) + 1
+      return acc
+    }, {})
+  }, [websites])
+
+  const loadLibraryData = useCallback(async () => {
+    setIsLoading(true)
+    setErrorMessage(null)
+
+    try {
+      const token = await getRequiredToken(getToken)
+      const [nextCategories, nextWebsites] = await Promise.all([
+        listCategories(token),
+        listWebsites(token, { limit: 200 }),
+      ])
+
+      setCategories(nextCategories)
+      setWebsites(nextWebsites)
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error))
+    } finally {
+      setIsLoading(false)
+    }
+  }, [getToken])
+
+  useEffect(() => {
+    void loadLibraryData()
+  }, [loadLibraryData])
+
+  async function handleCreateCategory(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    const name = newCategoryName.trim()
+
+    if (!name) {
+      return
+    }
+
+    setIsSaving(true)
+    setErrorMessage(null)
+
+    try {
+      const token = await getRequiredToken(getToken)
+      const category = await createCategory(token, { name })
+
+      setNewCategoryName('')
+      setShowCategoryForm(false)
+      await loadLibraryData()
+      navigate(`/library/${category._id}`)
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error))
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  return (
+    <SiteShell>
+      <main className="relative z-10 flex flex-1 px-6 pt-28 pb-16 sm:px-8">
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+          <header className="liquid-glass animate-fade-rise rounded-4xl px-6 py-7 sm:px-8">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs tracking-[0.3em] text-muted-foreground uppercase">
+                  Library
+                </p>
+                <h1
+                  className="mt-2 text-4xl font-normal tracking-[-1.4px]"
+                  style={{ fontFamily: "'Instrument Serif', serif" }}
+                >
+                  Library
+                </h1>
+              </div>
+
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setShowCategoryForm((current) => !current)}
+                className="liquid-glass rounded-full px-6 py-2.5 text-sm text-foreground hover:bg-transparent"
+              >
+                + New Category
+              </Button>
+            </div>
+
+            {showCategoryForm ? (
+              <form
+                className="mt-5 flex flex-col gap-3 sm:flex-row"
+                onSubmit={handleCreateCategory}
+              >
+                <input
+                  value={newCategoryName}
+                  onChange={(event) => setNewCategoryName(event.target.value)}
+                  placeholder="Category name"
+                  className="w-full rounded-full border border-white/20 bg-transparent px-4 py-2.5 text-sm text-foreground outline-none focus:border-white/45"
+                />
+
+                <Button
+                  type="submit"
+                  variant="ghost"
+                  disabled={isSaving || !newCategoryName.trim()}
+                  className="rounded-full border border-white/20 px-6 py-2.5 text-sm text-muted-foreground hover:bg-transparent hover:text-foreground"
+                >
+                  Create
+                </Button>
+              </form>
+            ) : null}
+          </header>
+
+          <section className="liquid-glass animate-fade-rise-delay rounded-4xl p-6 sm:p-8">
+            {isLoading ? (
+              <p className="text-sm text-muted-foreground">Loading categories...</p>
+            ) : categories.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Start by creating your first category.
+              </p>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {categories.map((category) => (
+                  <button
+                    key={category._id}
+                    type="button"
+                    onClick={() => navigate(`/library/${category._id}`)}
+                    className="liquid-glass rounded-3xl px-5 py-5 text-left transition-all hover:scale-[1.01] hover:shadow-[0_0_24px_rgba(255,255,255,0.08)]"
+                  >
+                    <p className="text-xl text-foreground">{category.name}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {categoryCounts[category._id] || 0} links
+                    </p>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {errorMessage ? (
+              <p className="mt-4 rounded-2xl border border-red-400/25 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                {errorMessage}
+              </p>
+            ) : null}
+          </section>
+        </div>
+      </main>
+    </SiteShell>
+  )
+}
+
+function CategoryViewPage() {
+  const navigate = useNavigate()
+  const { getToken } = useAuth()
+  const { categoryId = '' } = useParams()
+
+  const [category, setCategory] = useState<VaultCategory | null>(null)
+  const [links, setLinks] = useState<VaultWebsite[]>([])
+  const [showLinkForm, setShowLinkForm] = useState(false)
+  const [newUrl, setNewUrl] = useState('')
+  const [newTitle, setNewTitle] = useState('')
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
+  const loadCategoryData = useCallback(async () => {
+    if (!categoryId) {
+      return
+    }
+
+    setIsLoading(true)
+    setErrorMessage(null)
+
+    try {
+      const token = await getRequiredToken(getToken)
+      const allCategories = await listCategories(token)
+      const currentCategory = allCategories.find((item) => item._id === categoryId) || null
+
+      setCategory(currentCategory)
+
+      if (!currentCategory) {
+        setLinks([])
+        return
+      }
+
+      const categoryLinks = await listWebsites(token, {
+        categoryId,
+        limit: 200,
+      })
+
+      setLinks(categoryLinks)
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error))
+    } finally {
+      setIsLoading(false)
+    }
+  }, [categoryId, getToken])
+
+  useEffect(() => {
+    void loadCategoryData()
+  }, [loadCategoryData])
+
+  async function handleAddLink(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    const url = newUrl.trim()
+
+    if (!url || !categoryId) {
+      return
+    }
+
+    setIsSaving(true)
+    setErrorMessage(null)
+
+    try {
+      const token = await getRequiredToken(getToken)
+
+      await createWebsite(token, {
+        categoryId,
+        url,
+        title: newTitle.trim() || undefined,
+      })
+
+      setNewUrl('')
+      setNewTitle('')
+      setShowLinkForm(false)
+      await loadCategoryData()
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error))
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  return (
+    <SiteShell>
+      <main className="relative z-10 flex flex-1 px-6 pt-28 pb-16 sm:px-8">
+        <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+          <header className="liquid-glass animate-fade-rise rounded-4xl px-6 py-7 sm:px-8">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <button
+                  type="button"
+                  onClick={() => navigate('/library')}
+                  className="text-xs tracking-[0.28em] text-muted-foreground uppercase transition-colors hover:text-foreground"
+                >
+                  Back to Library
+                </button>
+
+                <h1
+                  className="mt-2 text-4xl font-normal tracking-[-1.4px]"
+                  style={{ fontFamily: "'Instrument Serif', serif" }}
+                >
+                  {category ? category.name : 'Category'}
+                </h1>
+              </div>
+
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setShowLinkForm((current) => !current)}
+                className="liquid-glass rounded-full px-6 py-2.5 text-sm text-foreground hover:bg-transparent"
+              >
+                + Add Link
+              </Button>
+            </div>
+
+            {showLinkForm ? (
+              <form className="mt-5 space-y-3" onSubmit={handleAddLink}>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <input
+                    value={newUrl}
+                    onChange={(event) => setNewUrl(event.target.value)}
+                    placeholder="https://example.com"
+                    className="w-full rounded-full border border-white/20 bg-transparent px-4 py-2.5 text-sm text-foreground outline-none focus:border-white/45"
+                  />
+
+                  <input
+                    value={newTitle}
+                    onChange={(event) => setNewTitle(event.target.value)}
+                    placeholder="Optional title"
+                    className="w-full rounded-full border border-white/20 bg-transparent px-4 py-2.5 text-sm text-foreground outline-none focus:border-white/45"
+                  />
+                </div>
+
+                <Button
+                  type="submit"
+                  variant="ghost"
+                  disabled={isSaving || !newUrl.trim()}
+                  className="rounded-full border border-white/20 px-6 py-2.5 text-sm text-muted-foreground hover:bg-transparent hover:text-foreground"
+                >
+                  Save Link
+                </Button>
+              </form>
+            ) : null}
+          </header>
+
+          <section className="liquid-glass animate-fade-rise-delay rounded-4xl p-6 sm:p-8">
+            {isLoading ? (
+              <p className="text-sm text-muted-foreground">Loading links...</p>
+            ) : !category ? (
+              <p className="text-sm text-muted-foreground">
+                Category not found. Return to Library and choose another.
+              </p>
+            ) : links.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No links yet. Add your first one.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {links.map((link) => (
+                  <li key={link._id}>
+                    <a
+                      href={link.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-3 rounded-2xl px-3 py-3 transition-colors hover:bg-white/5"
+                    >
+                      <img
+                        src={faviconFromUrl(link.url)}
+                        alt=""
+                        className="size-5 rounded-sm"
+                      />
+
+                      <div className="min-w-0">
+                        <p className="truncate text-sm text-foreground">{link.title}</p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {hostFromUrl(link.url)}
+                        </p>
+                      </div>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {errorMessage ? (
+              <p className="mt-4 rounded-2xl border border-red-400/25 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                {errorMessage}
+              </p>
+            ) : null}
+          </section>
+        </div>
+      </main>
+    </SiteShell>
+  )
+}
+
+function MePage() {
+  const { user } = useUser()
+  const [calmMode, setCalmMode] = useState(() => {
+    if (typeof window === 'undefined') {
+      return true
+    }
+
+    const stored = window.localStorage.getItem('vaultic-calm-mode')
+    return stored === null ? true : stored === 'true'
+  })
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    window.localStorage.setItem('vaultic-calm-mode', String(calmMode))
+  }, [calmMode])
+
+  return (
+    <SiteShell>
+      <main className="relative z-10 flex flex-1 px-6 pt-28 pb-16 sm:px-8">
+        <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
+          <header className="animate-fade-rise text-center">
+            <p className="text-xs tracking-[0.3em] text-muted-foreground uppercase">
+              Profile
+            </p>
+            <h1
+              className="mt-2 text-4xl font-normal tracking-[-1.4px]"
+              style={{ fontFamily: "'Instrument Serif', serif" }}
+            >
+              Me
+            </h1>
+          </header>
+
+          <section className="liquid-glass animate-fade-rise-delay rounded-4xl p-6 sm:p-8">
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">Name</p>
+              <p className="text-lg text-foreground">
+                {user?.fullName || user?.firstName || 'Vaultic Member'}
+              </p>
+            </div>
+
+            <div className="mt-5 space-y-2">
+              <p className="text-sm text-muted-foreground">Email</p>
+              <p className="text-lg text-foreground">
+                {user?.primaryEmailAddress?.emailAddress || 'No email available'}
+              </p>
+            </div>
+
+            <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Theme preference</p>
+                <p className="text-sm text-foreground">Cinematic calm mode</p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setCalmMode((current) => !current)}
+                className={cn(
+                  'rounded-full border px-5 py-2 text-sm transition-colors',
+                  calmMode
+                    ? 'border-white/35 text-foreground'
+                    : 'border-white/20 text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {calmMode ? 'Enabled' : 'Disabled'}
+              </button>
+            </div>
+
+            <div className="mt-8">
+              <SignOutButton>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="rounded-full border border-white/20 px-6 py-2.5 text-sm text-muted-foreground hover:bg-transparent hover:text-foreground"
+                >
+                  Logout
+                </Button>
+              </SignOutButton>
+            </div>
+          </section>
+        </div>
+      </main>
+    </SiteShell>
+  )
+}
+
 function AuthPage({ mode }: { mode: 'sign-in' | 'sign-up' }) {
   return (
     <SiteShell>
@@ -209,7 +822,7 @@ function AuthPage({ mode }: { mode: 'sign-in' | 'sign-up' }) {
 
           <div className="liquid-glass mx-auto mt-10 w-full max-w-md rounded-4xl p-6 sm:p-8">
             <SignedIn>
-              <Navigate to="/vault" replace />
+              <Navigate to="/" replace />
             </SignedIn>
 
             <SignedOut>
@@ -218,7 +831,7 @@ function AuthPage({ mode }: { mode: 'sign-in' | 'sign-up' }) {
                   routing="path"
                   path="/sign-in"
                   signUpUrl="/sign-up"
-                  forceRedirectUrl="/vault"
+                  forceRedirectUrl="/"
                   appearance={clerkAppearance}
                 />
               ) : (
@@ -226,7 +839,7 @@ function AuthPage({ mode }: { mode: 'sign-in' | 'sign-up' }) {
                   routing="path"
                   path="/sign-up"
                   signInUrl="/sign-in"
-                  forceRedirectUrl="/vault"
+                  forceRedirectUrl="/"
                   appearance={clerkAppearance}
                 />
               )}
@@ -238,675 +851,19 @@ function AuthPage({ mode }: { mode: 'sign-in' | 'sign-up' }) {
   )
 }
 
-function VaultPage() {
-  const { getToken } = useAuth()
-  const { user } = useUser()
-
-  const [categories, setCategories] = useState<VaultCategory[]>([])
-  const [websites, setWebsites] = useState<VaultWebsite[]>([])
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all')
-  const [searchInput, setSearchInput] = useState('')
-  const [searchQuery, setSearchQuery] = useState('')
-  const [newCategoryName, setNewCategoryName] = useState('')
-  const [newWebsite, setNewWebsite] = useState({
-    categoryId: '',
-    url: '',
-    title: '',
-    notes: '',
-    tags: '',
-  })
-  const [isLoading, setIsLoading] = useState(true)
-  const [isMutating, setIsMutating] = useState(false)
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
-
-  const categoriesById = useMemo(() => {
-    return categories.reduce<Record<string, VaultCategory>>((acc, category) => {
-      acc[category._id] = category
-      return acc
-    }, {})
-  }, [categories])
-
-  const getAccessToken = useCallback(async () => {
-    const token = await getToken()
-
-    if (!token) {
-      throw new Error('Session expired. Please sign in again.')
-    }
-
-    return token
-  }, [getToken])
-
-  const syncNewWebsiteCategory = useCallback(
-    (nextCategories: VaultCategory[], activeCategoryId: string) => {
-      setNewWebsite((current) => {
-        if (nextCategories.length === 0) {
-          if (!current.categoryId) {
-            return current
-          }
-
-          return {
-            ...current,
-            categoryId: '',
-          }
-        }
-
-        const categoryId =
-          current.categoryId &&
-          nextCategories.some((category) => category._id === current.categoryId)
-            ? current.categoryId
-            : activeCategoryId !== 'all' &&
-                nextCategories.some((category) => category._id === activeCategoryId)
-              ? activeCategoryId
-              : nextCategories[0]._id
-
-        if (categoryId === current.categoryId) {
-          return current
-        }
-
-        return {
-          ...current,
-          categoryId,
-        }
-      })
-    },
-    [],
-  )
-
-  const loadVaultData = useCallback(
-    async (
-      overrides?: {
-        categoryId?: string
-        search?: string
-      },
-      showLoader = true,
-    ) => {
-      const activeCategoryId = overrides?.categoryId ?? selectedCategoryId
-      const activeSearch = overrides?.search ?? searchQuery
-
-      if (showLoader) {
-        setIsLoading(true)
-      }
-
-      setErrorMessage(null)
-
-      try {
-        const token = await getAccessToken()
-        const nextCategories = await listCategories(token)
-
-        setCategories(nextCategories)
-        syncNewWebsiteCategory(nextCategories, activeCategoryId)
-
-        if (activeSearch.length >= 2) {
-          const searchResults = await searchWebsites(token, activeSearch)
-          const filteredResults =
-            activeCategoryId === 'all'
-              ? searchResults
-              : searchResults.filter(
-                  (website) => website.categoryId === activeCategoryId,
-                )
-
-          setWebsites(filteredResults)
-        } else {
-          const listedWebsites = await listWebsites(
-            token,
-            activeCategoryId === 'all'
-              ? {}
-              : {
-                  categoryId: activeCategoryId,
-                },
-          )
-
-          setWebsites(listedWebsites)
-        }
-      } catch (error) {
-        setErrorMessage(getErrorMessage(error))
-      } finally {
-        if (showLoader) {
-          setIsLoading(false)
-        }
-      }
-    },
-    [getAccessToken, searchQuery, selectedCategoryId, syncNewWebsiteCategory],
-  )
-
-  useEffect(() => {
-    void loadVaultData()
-  }, [loadVaultData])
-
-  async function handleCreateCategory(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-
-    const name = newCategoryName.trim()
-
-    if (!name) {
-      return
-    }
-
-    setIsMutating(true)
-    setErrorMessage(null)
-
-    try {
-      const token = await getAccessToken()
-      const category = await createCategory(token, { name })
-
-      setNewCategoryName('')
-      setSelectedCategoryId(category._id)
-      setSearchInput('')
-      setSearchQuery('')
-    } catch (error) {
-      setErrorMessage(getErrorMessage(error))
-    } finally {
-      setIsMutating(false)
-    }
-  }
-
-  async function handleDeleteCategory(categoryId: string) {
-    if (!window.confirm('Delete this category and all websites inside it?')) {
-      return
-    }
-
-    setIsMutating(true)
-    setErrorMessage(null)
-
-    try {
-      const token = await getAccessToken()
-
-      await deleteCategory(token, categoryId)
-
-      if (selectedCategoryId === categoryId) {
-        setSelectedCategoryId('all')
-      } else {
-        await loadVaultData(undefined, false)
-      }
-    } catch (error) {
-      setErrorMessage(getErrorMessage(error))
-    } finally {
-      setIsMutating(false)
-    }
-  }
-
-  async function handleCreateWebsite(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-
-    const url = newWebsite.url.trim()
-
-    if (!newWebsite.categoryId) {
-      setErrorMessage('Create a category first, then save your website.')
-      return
-    }
-
-    if (!url) {
-      return
-    }
-
-    setIsMutating(true)
-    setErrorMessage(null)
-
-    try {
-      const token = await getAccessToken()
-
-      await createWebsite(token, {
-        categoryId: newWebsite.categoryId,
-        url,
-        title: newWebsite.title.trim() || undefined,
-        notes: newWebsite.notes.trim() || undefined,
-        tags: toTagArray(newWebsite.tags),
-      })
-
-      setNewWebsite((current) => ({
-        ...current,
-        url: '',
-        title: '',
-        notes: '',
-        tags: '',
-      }))
-
-      await loadVaultData(undefined, false)
-    } catch (error) {
-      setErrorMessage(getErrorMessage(error))
-    } finally {
-      setIsMutating(false)
-    }
-  }
-
-  async function handleMoveWebsite(websiteId: string, categoryId: string) {
-    setIsMutating(true)
-    setErrorMessage(null)
-
-    try {
-      const token = await getAccessToken()
-
-      await moveWebsite(token, websiteId, categoryId)
-      await loadVaultData(undefined, false)
-    } catch (error) {
-      setErrorMessage(getErrorMessage(error))
-    } finally {
-      setIsMutating(false)
-    }
-  }
-
-  async function handleToggleFavorite(website: VaultWebsite) {
-    setIsMutating(true)
-    setErrorMessage(null)
-
-    try {
-      const token = await getAccessToken()
-
-      await updateWebsite(token, website._id, {
-        isFavorite: !website.isFavorite,
-      })
-
-      await loadVaultData(undefined, false)
-    } catch (error) {
-      setErrorMessage(getErrorMessage(error))
-    } finally {
-      setIsMutating(false)
-    }
-  }
-
-  async function handleDeleteWebsite(websiteId: string) {
-    if (!window.confirm('Delete this saved website?')) {
-      return
-    }
-
-    setIsMutating(true)
-    setErrorMessage(null)
-
-    try {
-      const token = await getAccessToken()
-
-      await deleteWebsite(token, websiteId)
-      await loadVaultData(undefined, false)
-    } catch (error) {
-      setErrorMessage(getErrorMessage(error))
-    } finally {
-      setIsMutating(false)
-    }
-  }
-
-  function handleSearchSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setSearchQuery(searchInput.trim())
-  }
-
-  function handleClearSearch() {
-    setSearchInput('')
-    setSearchQuery('')
-  }
-
-  const activeCategoryName =
-    selectedCategoryId === 'all'
-      ? 'all categories'
-      : categoriesById[selectedCategoryId]?.name || 'category'
-
-  const websiteSummary = `${websites.length} saved link${
-    websites.length === 1 ? '' : 's'
-  } in ${activeCategoryName}`
-
-  return (
-    <SiteShell>
-      <main className="relative z-10 flex-1 px-4 pt-28 pb-12 sm:px-8">
-        <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
-          <header className="liquid-glass rounded-4xl px-6 py-8 sm:px-10">
-            <p className="text-xs tracking-[0.3em] text-muted-foreground uppercase">
-              Vaultic Workspace
-            </p>
-            <h1
-              className="mt-3 text-4xl font-normal leading-[0.95] tracking-[-1.8px] sm:text-6xl"
-              style={{ fontFamily: "'Instrument Serif', serif" }}
-            >
-              Build your private index.
-            </h1>
-            <p className="mt-5 max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-              {user?.firstName
-                ? `Welcome back, ${user.firstName}.`
-                : 'Welcome back.'}{' '}
-              Shape categories, collect links, and keep your web research
-              beautifully organized.
-            </p>
-          </header>
-
-          <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
-            <aside className="liquid-glass rounded-4xl p-5 sm:p-6">
-              <h2 className="text-lg text-foreground">Categories</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Organize links by purpose.
-              </p>
-
-              <form className="mt-4 space-y-3" onSubmit={handleCreateCategory}>
-                <input
-                  value={newCategoryName}
-                  onChange={(event) => setNewCategoryName(event.target.value)}
-                  placeholder="Design inspiration"
-                  className="w-full rounded-full border border-white/20 bg-transparent px-4 py-2.5 text-sm text-foreground outline-none focus:border-white/45"
-                />
-
-                <Button
-                  type="submit"
-                  variant="ghost"
-                  disabled={isMutating || !newCategoryName.trim()}
-                  className="liquid-glass w-full rounded-full px-5 py-2.5 text-sm text-foreground hover:bg-transparent"
-                >
-                  Add Category
-                </Button>
-              </form>
-
-              <div className="mt-6 space-y-2">
-                <button
-                  type="button"
-                  onClick={() => setSelectedCategoryId('all')}
-                  className={cn(
-                    'flex w-full items-center justify-between rounded-2xl border px-4 py-2.5 text-left text-sm transition-colors',
-                    selectedCategoryId === 'all'
-                      ? 'border-white/35 bg-white/8 text-foreground'
-                      : 'border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground',
-                  )}
-                >
-                  <span>All categories</span>
-                </button>
-
-                {categories.map((category) => {
-                  const isSelected = selectedCategoryId === category._id
-
-                  return (
-                    <div className="flex items-center gap-2" key={category._id}>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedCategoryId(category._id)}
-                        className={cn(
-                          'flex flex-1 items-center justify-between rounded-2xl border px-4 py-2.5 text-left text-sm transition-colors',
-                          isSelected
-                            ? 'border-white/35 bg-white/8 text-foreground'
-                            : 'border-white/10 text-muted-foreground hover:border-white/20 hover:text-foreground',
-                        )}
-                      >
-                        <span>{category.name}</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => void handleDeleteCategory(category._id)}
-                        disabled={isMutating}
-                        className="rounded-full border border-white/10 px-3 py-2 text-xs text-muted-foreground transition-colors hover:border-white/25 hover:text-foreground"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  )
-                })}
-              </div>
-            </aside>
-
-            <section className="space-y-6">
-              <div className="liquid-glass rounded-4xl p-5 sm:p-6">
-                <h2 className="text-lg text-foreground">Capture Website</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Save links with notes and tags for quick retrieval.
-                </p>
-
-                <form className="mt-4 space-y-3" onSubmit={handleCreateWebsite}>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <select
-                      value={newWebsite.categoryId}
-                      onChange={(event) =>
-                        setNewWebsite((current) => ({
-                          ...current,
-                          categoryId: event.target.value,
-                        }))
-                      }
-                      disabled={categories.length === 0}
-                      className="w-full rounded-full border border-white/20 bg-transparent px-4 py-2.5 text-sm text-foreground outline-none focus:border-white/45 disabled:opacity-50"
-                    >
-                      {categories.length === 0 ? (
-                        <option value="">Create a category first</option>
-                      ) : null}
-
-                      {categories.map((category) => (
-                        <option key={category._id} value={category._id}>
-                          {category.name}
-                        </option>
-                      ))}
-                    </select>
-
-                    <input
-                      value={newWebsite.url}
-                      onChange={(event) =>
-                        setNewWebsite((current) => ({
-                          ...current,
-                          url: event.target.value,
-                        }))
-                      }
-                      placeholder="https://example.com"
-                      className="w-full rounded-full border border-white/20 bg-transparent px-4 py-2.5 text-sm text-foreground outline-none focus:border-white/45"
-                    />
-                  </div>
-
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <input
-                      value={newWebsite.title}
-                      onChange={(event) =>
-                        setNewWebsite((current) => ({
-                          ...current,
-                          title: event.target.value,
-                        }))
-                      }
-                      placeholder="Optional title"
-                      className="w-full rounded-full border border-white/20 bg-transparent px-4 py-2.5 text-sm text-foreground outline-none focus:border-white/45"
-                    />
-
-                    <input
-                      value={newWebsite.tags}
-                      onChange={(event) =>
-                        setNewWebsite((current) => ({
-                          ...current,
-                          tags: event.target.value,
-                        }))
-                      }
-                      placeholder="tags, comma, separated"
-                      className="w-full rounded-full border border-white/20 bg-transparent px-4 py-2.5 text-sm text-foreground outline-none focus:border-white/45"
-                    />
-                  </div>
-
-                  <textarea
-                    value={newWebsite.notes}
-                    onChange={(event) =>
-                      setNewWebsite((current) => ({
-                        ...current,
-                        notes: event.target.value,
-                      }))
-                    }
-                    rows={3}
-                    placeholder="Add a short note for future context"
-                    className="w-full resize-none rounded-3xl border border-white/20 bg-transparent px-4 py-3 text-sm text-foreground outline-none focus:border-white/45"
-                  />
-
-                  <Button
-                    type="submit"
-                    variant="ghost"
-                    disabled={isMutating || categories.length === 0}
-                    className="liquid-glass rounded-full px-7 py-2.5 text-sm text-foreground hover:bg-transparent"
-                  >
-                    Save Website
-                  </Button>
-                </form>
-              </div>
-
-              <div className="liquid-glass rounded-4xl p-5 sm:p-6">
-                <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-                  <div>
-                    <h2 className="text-lg text-foreground">Saved Links</h2>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {websiteSummary}
-                      {searchQuery ? ` matching "${searchQuery}"` : ''}
-                    </p>
-                  </div>
-
-                  <form
-                    className="flex w-full flex-col gap-2 sm:flex-row xl:max-w-xl"
-                    onSubmit={handleSearchSubmit}
-                  >
-                    <input
-                      value={searchInput}
-                      onChange={(event) => setSearchInput(event.target.value)}
-                      placeholder="Search title, notes, tags"
-                      className="w-full rounded-full border border-white/20 bg-transparent px-4 py-2.5 text-sm text-foreground outline-none focus:border-white/45"
-                    />
-
-                    <Button
-                      type="submit"
-                      variant="ghost"
-                      className="liquid-glass rounded-full px-6 py-2.5 text-sm text-foreground hover:bg-transparent"
-                    >
-                      Search
-                    </Button>
-
-                    {searchQuery ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={handleClearSearch}
-                        className="rounded-full border border-white/20 px-6 py-2.5 text-sm text-muted-foreground hover:text-foreground"
-                      >
-                        Clear
-                      </Button>
-                    ) : null}
-                  </form>
-                </div>
-
-                {errorMessage ? (
-                  <p className="mt-4 rounded-2xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-                    {errorMessage}
-                  </p>
-                ) : null}
-
-                {isLoading ? (
-                  <p className="mt-6 text-sm text-muted-foreground">
-                    Loading your vault...
-                  </p>
-                ) : websites.length === 0 ? (
-                  <p className="mt-6 rounded-3xl border border-white/10 px-4 py-5 text-sm text-muted-foreground">
-                    No websites yet for this view. Save your first link to bring
-                    this vault to life.
-                  </p>
-                ) : (
-                  <div className="mt-6 space-y-3">
-                    {websites.map((website) => (
-                      <article
-                        key={website._id}
-                        className="rounded-3xl border border-white/15 bg-black/20 px-4 py-4 backdrop-blur-sm"
-                      >
-                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                          <div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <h3 className="text-lg text-foreground">
-                                {website.title}
-                              </h3>
-
-                              {website.isFavorite ? (
-                                <span className="rounded-full border border-amber-300/40 bg-amber-300/15 px-2 py-0.5 text-xs text-amber-200">
-                                  Favorite
-                                </span>
-                              ) : null}
-                            </div>
-
-                            <a
-                              href={website.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="mt-1 inline-block text-sm text-muted-foreground hover:text-foreground"
-                            >
-                              {formatHost(website.url)}
-                            </a>
-
-                            {website.notes ? (
-                              <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-                                {website.notes}
-                              </p>
-                            ) : null}
-
-                            {website.tags.length > 0 ? (
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                {website.tags.map((tag) => (
-                                  <span
-                                    key={`${website._id}-${tag}`}
-                                    className="rounded-full border border-white/15 px-2.5 py-1 text-xs text-muted-foreground"
-                                  >
-                                    #{tag}
-                                  </span>
-                                ))}
-                              </div>
-                            ) : null}
-                          </div>
-
-                          <div className="flex w-full flex-col gap-2 lg:w-56">
-                            <select
-                              value={website.categoryId}
-                              onChange={(event) =>
-                                void handleMoveWebsite(
-                                  website._id,
-                                  event.target.value,
-                                )
-                              }
-                              disabled={isMutating}
-                              className="w-full rounded-full border border-white/20 bg-transparent px-3 py-2 text-sm text-foreground outline-none focus:border-white/45"
-                            >
-                              {categories.map((category) => (
-                                <option key={category._id} value={category._id}>
-                                  {category.name}
-                                </option>
-                              ))}
-                            </select>
-
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              onClick={() => void handleToggleFavorite(website)}
-                              disabled={isMutating}
-                              className="rounded-full border border-white/20 px-5 py-2 text-xs text-muted-foreground hover:bg-transparent hover:text-foreground"
-                            >
-                              {website.isFavorite
-                                ? 'Remove Favorite'
-                                : 'Mark Favorite'}
-                            </Button>
-
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              onClick={() => void handleDeleteWebsite(website._id)}
-                              disabled={isMutating}
-                              className="rounded-full border border-white/20 px-5 py-2 text-xs text-muted-foreground hover:bg-transparent hover:text-foreground"
-                            >
-                              Delete
-                            </Button>
-
-                            <p className="text-right text-xs text-muted-foreground">
-                              Updated{' '}
-                              {new Date(website.updatedAt).toLocaleDateString()}
-                            </p>
-                          </div>
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </section>
-          </div>
-        </div>
-      </main>
-    </SiteShell>
-  )
-}
-
-function ProtectedVaultPage() {
+function ProtectedRoute({
+  children,
+  redirectUrl,
+}: {
+  children: ReactNode
+  redirectUrl: string
+}) {
   return (
     <>
-      <SignedIn>
-        <VaultPage />
-      </SignedIn>
+      <SignedIn>{children}</SignedIn>
 
       <SignedOut>
-        <RedirectToSignIn redirectUrl="/vault" />
+        <RedirectToSignIn redirectUrl={redirectUrl} />
       </SignedOut>
     </>
   )
@@ -915,10 +872,38 @@ function ProtectedVaultPage() {
 function App() {
   return (
     <Routes>
-      <Route path="/" element={<LandingPage />} />
+      <Route path="/" element={<HomePage />} />
+
+      <Route
+        path="/library"
+        element={
+          <ProtectedRoute redirectUrl="/library">
+            <LibraryPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/library/:categoryId"
+        element={
+          <ProtectedRoute redirectUrl="/library">
+            <CategoryViewPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/me"
+        element={
+          <ProtectedRoute redirectUrl="/me">
+            <MePage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route path="/vault" element={<Navigate to="/library" replace />} />
       <Route path="/sign-in/*" element={<AuthPage mode="sign-in" />} />
       <Route path="/sign-up/*" element={<AuthPage mode="sign-up" />} />
-      <Route path="/vault" element={<ProtectedVaultPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
