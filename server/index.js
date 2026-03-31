@@ -14,9 +14,16 @@ const app = express()
 
 const frontendOrigin = process.env.FRONTEND_ORIGIN || 'http://localhost:5173'
 const port = Number(process.env.PORT || 4000)
+const clerkPublishableKey =
+  process.env.CLERK_PUBLISHABLE_KEY || process.env.VITE_CLERK_PUBLISHABLE_KEY
+
 const missingEnv = ['CLERK_SECRET_KEY', 'MONGODB_URI'].filter(
   (name) => !process.env[name] || !process.env[name].trim(),
 )
+
+if (!clerkPublishableKey) {
+  missingEnv.push('CLERK_PUBLISHABLE_KEY (or VITE_CLERK_PUBLISHABLE_KEY)')
+}
 
 if (missingEnv.length > 0) {
   console.error(
@@ -41,7 +48,12 @@ app.get('/health', (_req, res) => {
   })
 })
 
-app.use(clerkMiddleware())
+app.use(
+  clerkMiddleware({
+    publishableKey: clerkPublishableKey,
+    secretKey: process.env.CLERK_SECRET_KEY,
+  }),
+)
 
 app.use('/api/categories', categoriesRouter)
 app.use('/api/websites', websitesRouter)

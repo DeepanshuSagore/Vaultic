@@ -22,10 +22,27 @@ export function errorHandler(error, _req, res, _next) {
     return res.status(400).json({ message: 'Invalid identifier format' })
   }
 
-  const status = error && typeof error.status === 'number' ? error.status : 500
+  const statusCandidates = [
+    error && typeof error.status === 'number' ? error.status : undefined,
+    error && typeof error.statusCode === 'number' ? error.statusCode : undefined,
+    error && typeof error.code === 'number' ? error.code : undefined,
+  ]
+
+  const status =
+    statusCandidates.find(
+      (candidate) => typeof candidate === 'number' && candidate >= 400,
+    ) ?? (error && error.clerkError ? 401 : 500)
+
+  const clerkMessage =
+    error && error.clerkError && Array.isArray(error.errors) && error.errors[0]
+      ? error.errors[0].longMessage || error.errors[0].message
+      : undefined
+
   const message =
     status >= 500
       ? 'Internal server error'
+      : clerkMessage
+        ? clerkMessage
       : error && error.message
         ? error.message
         : 'Request failed'

@@ -1,6 +1,14 @@
-import { getAuth, requireAuth } from '@clerk/express'
+import { getAuth } from '@clerk/express'
 
-export const requireUser = requireAuth()
+export function requireUser(req, res, next) {
+  const { userId } = getAuth(req)
+
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' })
+  }
+
+  return next()
+}
 
 export function getUserId(req) {
   const { userId } = getAuth(req)
