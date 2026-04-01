@@ -11,6 +11,7 @@ import {
 } from '@clerk/clerk-react'
 import type { FormEvent, ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { CategoryLinearCarousel } from '@/components/category-orbital-carousel'
 import { Button } from '@/components/ui/button'
 import { DottedSurface } from '@/components/ui/dotted-surface'
 import { RulerCarousel } from '@/components/ui/ruler-carousel'
@@ -217,6 +218,7 @@ function HomeDashboard() {
   const { getToken } = useAuth()
 
   const [categories, setCategories] = useState<VaultCategory[]>([])
+  const [carouselType, setCarouselType] = useState<'sphere' | 'ruler'>('sphere')
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
@@ -254,8 +256,45 @@ function HomeDashboard() {
           </header>
 
           <section className="animate-fade-rise-delay">
+            <div className="mb-5 flex justify-center">
+              <div className="liquid-glass inline-flex rounded-full p-1">
+                <button
+                  type="button"
+                  onClick={() => setCarouselType('sphere')}
+                  className={cn(
+                    'rounded-full px-4 py-2 text-sm transition-colors',
+                    carouselType === 'sphere'
+                      ? 'bg-white/15 text-foreground'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  Sphere
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setCarouselType('ruler')}
+                  className={cn(
+                    'rounded-full px-4 py-2 text-sm transition-colors',
+                    carouselType === 'ruler'
+                      ? 'bg-white/15 text-foreground'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  Ruler
+                </button>
+              </div>
+            </div>
+
             {isLoading ? (
               <p className="mt-6 text-sm text-muted-foreground">Loading categories...</p>
+            ) : carouselType === 'sphere' ? (
+              <CategoryLinearCarousel
+                categories={categories}
+                onCategoryNavigate={(category) => {
+                  navigate(`/library/${toCategoryPath(category.name)}`)
+                }}
+              />
             ) : (
               <RulerCarousel
                 className="mt-24"
