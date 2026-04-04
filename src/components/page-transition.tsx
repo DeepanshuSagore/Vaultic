@@ -18,7 +18,7 @@ const pageVariants = {
     filter: 'blur(0px)',
     transition: {
       duration: 0.5,
-      ease: [0.22, 1, 0.36, 1],
+      ease: [0.22, 1, 0.36, 1] as [number, number, number, number],
     },
   },
   exit: {
@@ -27,7 +27,7 @@ const pageVariants = {
     filter: 'blur(4px)',
     transition: {
       duration: 0.3,
-      ease: [0.22, 1, 0.36, 1],
+      ease: [0.22, 1, 0.36, 1] as [number, number, number, number],
     },
   },
 }
@@ -39,7 +39,7 @@ const curtainVariants = {
     transition: {
       duration: 0.8,
       times: [0, 0.35, 0.65, 1],
-      ease: [0.22, 1, 0.36, 1],
+      ease: [0.22, 1, 0.36, 1] as [number, number, number, number],
     },
   },
 }

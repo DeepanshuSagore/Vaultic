@@ -30,7 +30,7 @@ export const staggeredItemVariants = {
     y: 0,
     filter: 'blur(0px)',
     transition: {
-      type: 'spring',
+      type: 'spring' as const,
       stiffness: 100,
       damping: 20,
       mass: 1,
