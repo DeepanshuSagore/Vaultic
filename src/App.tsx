@@ -6,7 +6,7 @@ import {
 import type { ReactNode } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 
-import { PageTransition } from '@/components/page-transition'
+import { AuthenticatedLayout } from '@/components/layout-shell'
 import { HomeHero } from '@/pages/home-hero'
 import { DashboardPage } from '@/pages/dashboard'
 import { CategoryViewPage } from '@/pages/category-view'
@@ -37,7 +37,7 @@ function HomePage() {
         <HomeHero />
       </SignedOut>
       <SignedIn>
-        <DashboardPage />
+        <Navigate to="/library" replace />
       </SignedIn>
     </>
   )
@@ -45,43 +45,29 @@ function HomePage() {
 
 function App() {
   return (
-    <PageTransition>
-      <Routes>
-        <Route path="/" element={<HomePage />} />
+    <Routes>
+      {/* Public routes */}
+      <Route path="/" element={<HomePage />} />
+      <Route path="/sign-in/*" element={<AuthPage mode="sign-in" />} />
+      <Route path="/sign-up/*" element={<AuthPage mode="sign-up" />} />
 
-        <Route
-          path="/library"
-          element={
-            <ProtectedRoute redirectUrl="/library">
-              <DashboardPage />
-            </ProtectedRoute>
-          }
-        />
+      {/* Authenticated routes — share a single layout (sidebar + topbar mount ONCE) */}
+      <Route
+        element={
+          <ProtectedRoute redirectUrl="/library">
+            <AuthenticatedLayout />
+          </ProtectedRoute>
+        }
+      >
+        <Route path="/library" element={<DashboardPage />} />
+        <Route path="/library/:categoryRef" element={<CategoryViewPage />} />
+        <Route path="/me" element={<ProfilePage />} />
+      </Route>
 
-        <Route
-          path="/library/:categoryRef"
-          element={
-            <ProtectedRoute redirectUrl="/library">
-              <CategoryViewPage />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/me"
-          element={
-            <ProtectedRoute redirectUrl="/me">
-              <ProfilePage />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route path="/vault" element={<Navigate to="/library" replace />} />
-        <Route path="/sign-in/*" element={<AuthPage mode="sign-in" />} />
-        <Route path="/sign-up/*" element={<AuthPage mode="sign-up" />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </PageTransition>
+      {/* Legacy redirect */}
+      <Route path="/vault" element={<Navigate to="/library" replace />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   )
 }
 
