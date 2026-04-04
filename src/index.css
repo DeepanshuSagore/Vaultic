@@ -1,37 +1,53 @@
-@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500&display=swap');
 @import 'tailwindcss';
 
+/* ─── Design Tokens ─── */
 :root {
-  --font-display: 'Instrument Serif', serif;
+  --font-display: 'Playfair Display', serif;
   --font-body: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
 
-  --background: 201 100% 13%;
-  --foreground: 0 0% 100%;
-  --muted-foreground: 240 4% 66%;
-  --primary: 0 0% 100%;
-  --primary-foreground: 0 0% 4%;
-  --secondary: 0 0% 10%;
+  --background: 0 0% 2%;
+  --foreground: 0 0% 96%;
   --muted: 0 0% 10%;
-  --accent: 0 0% 10%;
-  --border: 0 0% 18%;
-  --input: 0 0% 18%;
+  --muted-foreground: 0 0% 55%;
+  --surface: 0 0% 7%;
+  --surface-elevated: 0 0% 11%;
+  --primary: 0 0% 96%;
+  --primary-foreground: 0 0% 2%;
+  --accent: 43 76% 64%;
+  --accent-foreground: 0 0% 2%;
+  --border: 0 0% 16%;
+  --border-subtle: 0 0% 12%;
+  --input: 0 0% 14%;
+  --destructive: 0 62% 55%;
+  --ring: 43 76% 64%;
 }
 
 @theme inline {
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
+  --color-muted: hsl(var(--muted));
   --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-surface: hsl(var(--surface));
+  --color-surface-elevated: hsl(var(--surface-elevated));
   --color-primary: hsl(var(--primary));
   --color-primary-foreground: hsl(var(--primary-foreground));
-  --color-secondary: hsl(var(--secondary));
-  --color-muted: hsl(var(--muted));
   --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
   --color-border: hsl(var(--border));
+  --color-border-subtle: hsl(var(--border-subtle));
   --color-input: hsl(var(--input));
+  --color-destructive: hsl(var(--destructive));
+  --color-ring: hsl(var(--ring));
 }
 
+/* ─── Base ─── */
 * {
-  border-color: hsl(var(--border));
+  border-color: hsl(var(--border-subtle));
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 html,
@@ -43,38 +59,55 @@ body,
 body {
   margin: 0;
   font-family: var(--font-body);
-  background: hsl(var(--background));
+  background: #050505;
   color: hsl(var(--foreground));
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-.liquid-glass {
-  background: rgba(255, 255, 255, 0.01);
+::selection {
+  background: hsl(var(--accent) / 0.3);
+  color: hsl(var(--foreground));
+}
+
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground));
+}
+
+/* ─── Frosted Obsidian (Glassmorphism 2.0) ─── */
+.frosted-obsidian {
+  background: rgba(12, 12, 12, 0.65);
   background-blend-mode: luminosity;
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  border: none;
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
   position: relative;
   overflow: hidden;
 }
 
-.liquid-glass::before {
+.frosted-obsidian::before {
   content: '';
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  padding: 1.4px;
+  padding: 0.5px;
   background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.45) 0%,
-    rgba(255, 255, 255, 0.15) 20%,
-    rgba(255, 255, 255, 0) 40%,
-    rgba(255, 255, 255, 0) 60%,
-    rgba(255, 255, 255, 0.15) 80%,
-    rgba(255, 255, 255, 0.45) 100%
+    160deg,
+    rgba(255, 255, 255, 0.12) 0%,
+    rgba(255, 255, 255, 0.04) 30%,
+    transparent 60%,
+    rgba(232, 195, 94, 0.06) 100%
   );
   -webkit-mask:
     linear-gradient(#fff 0 0) content-box,
@@ -82,28 +115,143 @@ body {
   -webkit-mask-composite: xor;
   mask-composite: exclude;
   pointer-events: none;
+  z-index: 1;
 }
 
-@keyframes fade-rise {
+/* ─── Glass-to-Glow Hover Effect ─── */
+.glass-to-glow {
+  position: relative;
+  transition: box-shadow 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.glass-to-glow::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 0.5px;
+  background: linear-gradient(
+    160deg,
+    rgba(255, 255, 255, 0.12) 0%,
+    rgba(255, 255, 255, 0.04) 30%,
+    transparent 60%,
+    rgba(232, 195, 94, 0.06) 100%
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 1;
+  transition: background 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.glass-to-glow:hover::before {
+  background: linear-gradient(
+    160deg,
+    rgba(232, 195, 94, 0.35) 0%,
+    rgba(232, 195, 94, 0.12) 30%,
+    transparent 50%,
+    rgba(232, 195, 94, 0.08) 100%
+  );
+}
+
+.glass-to-glow:hover {
+  box-shadow: 0 0 30px rgba(232, 195, 94, 0.06), 0 0 60px rgba(232, 195, 94, 0.03);
+}
+
+/* ─── Keyframes ─── */
+@keyframes fade-up {
   from {
     opacity: 0;
-    transform: translateY(24px);
+    transform: translateY(28px);
   }
-
   to {
     opacity: 1;
     transform: translateY(0);
   }
 }
 
-.animate-fade-rise {
-  animation: fade-rise 0.8s ease-out both;
+@keyframes scan-line {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(200%);
+  }
 }
 
-.animate-fade-rise-delay {
-  animation: fade-rise 0.8s ease-out 0.2s both;
+@keyframes glow-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.9;
+  }
 }
 
-.animate-fade-rise-delay-2 {
-  animation: fade-rise 0.8s ease-out 0.4s both;
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-fade-up-d1 {
+  animation: fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.1s both;
+}
+
+.animate-fade-up-d2 {
+  animation: fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.2s both;
+}
+
+.animate-fade-up-d3 {
+  animation: fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.3s both;
+}
+
+.animate-scan-line {
+  animation: scan-line 2s cubic-bezier(0.22, 1, 0.36, 1) 0.5s both;
+}
+
+.animate-glow-pulse {
+  animation: glow-pulse 3s ease-in-out infinite;
+}
+
+.animate-shimmer {
+  background-size: 200% 100%;
+  animation: shimmer 3s linear infinite;
+}
+
+/* ─── Utility: font families ─── */
+.font-display {
+  font-family: var(--font-display);
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+.font-body {
+  font-family: var(--font-body);
+}
+
+/* ─── Utility: Accent text ─── */
+.text-gold {
+  color: #e8c35e;
+}
+
+.border-gold {
+  border-color: rgba(232, 195, 94, 0.25);
+}
+
+.bg-gold {
+  background-color: #e8c35e;
 }

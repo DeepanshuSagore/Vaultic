@@ -138,6 +138,17 @@ export function createCategory(token: string, payload: CreateCategoryPayload) {
   })
 }
 
+export function updateCategory(
+  token: string,
+  categoryId: string,
+  payload: Partial<CreateCategoryPayload>,
+) {
+  return request<VaultCategory>(token, `/api/categories/${categoryId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+}
+
 export function deleteCategory(token: string, categoryId: string) {
   return request<void>(token, `/api/categories/${categoryId}`, {
     method: 'DELETE',
