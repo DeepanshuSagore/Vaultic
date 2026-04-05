@@ -6,7 +6,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { useVaultData } from '@/components/layout-shell'
-import { BentoCard } from '@/components/ui/bento-card'
+import Folder from '@/components/ui/folder'
 import {
   StaggeredContainer,
   StaggeredItem,
@@ -141,7 +141,7 @@ export function DashboardPage() {
         </StaggeredContainer>
       ) : (
         <StaggeredContainer className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {categories.map((cat, index) => (
+          {categories.map((cat) => (
             <StaggeredItem key={cat._id}>
               <div className="group/card relative">
                 {/* Edit/Delete toolbar — appears on hover */}
@@ -232,12 +232,23 @@ export function DashboardPage() {
                   </motion.div>
                 ) : (
                   /* Normal card */
-                  <BentoCard
-                    name={cat.name}
-                    linkCount={categoryCounts[cat._id] || 0}
-                    span={index === 0 && categories.length > 2 ? 2 : 1}
-                    onClick={() => navigate(`/library/${cat._id}`)}
-                  />
+                  <div className="flex flex-col items-center justify-center py-6 cursor-pointer group/folder-wrapper" onClick={() => navigate(`/library/${cat._id}`)}>
+                    <div className="mb-12 pointer-events-auto">
+                      <Folder
+                        size={1.5}
+                        color="#161616"
+                        onClick={() => navigate(`/library/${cat._id}`)}
+                      />
+                    </div>
+                    <div className="text-center mt-2 group-hover/card:scale-105 transition-transform duration-300">
+                      <h3 className="font-display text-2xl font-medium tracking-tight text-foreground transition-colors group-hover/card:text-accent">
+                        {cat.name}
+                      </h3>
+                      <p className="mt-2 text-xs font-mono tracking-widest text-muted-foreground uppercase">
+                        {categoryCounts[cat._id] || 0} artifacts
+                      </p>
+                    </div>
+                  </div>
                 )}
               </div>
             </StaggeredItem>
