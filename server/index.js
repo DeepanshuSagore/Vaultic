@@ -66,11 +66,16 @@ app.use(errorHandler)
 
 connectDatabase()
   .then(() => {
-    app.listen(port, () => {
-      console.log(`Vaultic API running on http://localhost:${port}`)
-    })
+    // On Vercel, do not bind to a port — the serverless handler manages requests
+    if (process.env.VERCEL !== '1') {
+      app.listen(port, () => {
+        console.log(`Vaultic API running on http://localhost:${port}`)
+      })
+    }
   })
   .catch((error) => {
     console.error('Failed to connect database:', error)
     process.exit(1)
   })
+
+export default app

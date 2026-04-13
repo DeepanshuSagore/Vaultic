@@ -1,6 +1,13 @@
 import mongoose from 'mongoose'
 
+let cachedConnection = null
+
 export async function connectDatabase() {
+  // If we already have an active connection, reuse it (important for serverless)
+  if (cachedConnection && mongoose.connection.readyState === 1) {
+    return cachedConnection
+  }
+
   const mongoUri = process.env.MONGODB_URI
 
   if (!mongoUri) {
@@ -14,6 +21,11 @@ export async function connectDatabase() {
 
   const dbName = process.env.MONGODB_DB_NAME || undefined
 
-  await mongoose.connect(mongoUri, { dbName, serverSelectionTimeoutMS: 10000 })
+  cachedConnection = await mongoose.connect(mongoUri, {
+    dbName,
+    serverSelectionTimeoutMS: 10000,
+  })
   console.log('MongoDB connected successfully')
+
+  return cachedConnection
 }
