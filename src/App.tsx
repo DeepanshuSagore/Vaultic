@@ -1,4 +1,5 @@
 import {
+  AuthenticateWithRedirectCallback,
   RedirectToSignIn,
   SignedIn,
   SignedOut,
@@ -48,6 +49,7 @@ function App() {
     <Routes>
       {/* Public routes */}
       <Route path="/" element={<HomePage />} />
+      <Route path="/sso-callback" element={<AuthenticateWithRedirectCallback />} />
       <Route path="/sign-in/*" element={<AuthPage mode="sign-in" />} />
       <Route path="/sign-up/*" element={<AuthPage mode="sign-up" />} />
 
